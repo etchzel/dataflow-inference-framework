@@ -1,12 +1,17 @@
 from apache_beam import DoFn
 
 class Input(DoFn):
-  def __init__(self):
-    raise NotImplementedError
+  def __init__(self, table_name):
+    self.table_name = table_name
   
   def setup(self):
-    raise NotImplementedError
+    from google.cloud import bigquery
+    self.client = bigquery.Client()
   
   def process(self, element):
+    table_name = self.table_name.get()
+    
     # write your input logic below
-    raise NotImplementedError
+
+    # to pass your input to the next step in the pipeline, use yield <input-data>
+    yield ''
