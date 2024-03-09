@@ -6,27 +6,26 @@ from modules.options import UserOptions
 from modules.input import Input
 from modules.output import Output
 from apache_beam.options.pipeline_options import PipelineOptions
-from apache_beam.ml.inference.base import RunInference
+from apache_beam.ml.inference.base import RunInference, KeyedModelHandler
 from apache_beam.ml.inference.vertex_ai_inference import VertexAIModelHandlerJSON
   
 def main(known_args, pipeline_args):
   runner = known_args.runner
   pipeline_options = PipelineOptions(pipeline_args, streaming=False, runner=runner)
 
-  model_handler = VertexAIModelHandlerJSON(
+  model_handler = KeyedModelHandler(VertexAIModelHandlerJSON(
     endpoint_id=known_args.endpoint_id,
     project=known_args.project,
-    location=known_args.region
-  )
+    location=known_args.location
+  ))
   with beam.Pipeline(options=pipeline_options) as pipeline:
     user_options = pipeline_options.view_as(UserOptions)
     predict = (
       pipeline
       | "Initialize" >> beam.Create(['init'])
-      | "Input" >> beam.ParDo(Input())
+      | "Input" >> beam.ParDo(Input(user_options.table_name))
       | "Inference" >> RunInference(model_handler=model_handler)
-      | "Output" >> beam.ParDo(Output())
-      | "Print Result" >> beam.Map(print)
+      | "Output" >> beam.ParDo(Output(user_options.target_table))
     )
 
 if __name__ == "__main__":
@@ -43,6 +42,9 @@ if __name__ == "__main__":
   # required args
   parser.add_argument(
     "--endpoint_id", required=True
+  )
+  parser.add_argument(
+    "--location", required=True
   )
   parser.add_argument(
     "--project", required=True                  # example: engineering-training-413102
