@@ -4,19 +4,32 @@ import sys
 import apache_beam as beam
 from modules.options import UserOptions
 from modules.input import Input
-from modules.output import Output
+from modules.schema import target_schema
+from apache_beam.io.gcp.bigquery import WriteToBigQuery
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.ml.inference.base import RunInference, KeyedModelHandler
 from apache_beam.ml.inference.vertex_ai_inference import VertexAIModelHandlerJSON
+
+def format_output(row):
+  output = {
+    **dict(row[0]),
+    "fraud_inference": row[1].inference
+  }
+  return output
   
 def main(known_args, pipeline_args):
   runner = known_args.runner
-  pipeline_options = PipelineOptions(pipeline_args, streaming=False, runner=runner)
+  pipeline_options = PipelineOptions(
+    pipeline_args, 
+    streaming=False, 
+    runner=runner,
+    experiments=["use_runner_v2", "use_beam_bq_sink"]
+  )
 
   model_handler = KeyedModelHandler(VertexAIModelHandlerJSON(
     endpoint_id=known_args.endpoint_id,
     project=known_args.project,
-    location=known_args.location
+    location=known_args.region
   ))
   with beam.Pipeline(options=pipeline_options) as pipeline:
     user_options = pipeline_options.view_as(UserOptions)
@@ -24,8 +37,13 @@ def main(known_args, pipeline_args):
       pipeline
       | "Initialize" >> beam.Create(['init'])
       | "Input" >> beam.ParDo(Input(user_options.table_name))
-      | "Inference" >> RunInference(model_handler=model_handler)
-      | "Output" >> beam.ParDo(Output(user_options.target_table))
+      | "Inference" >> RunInference(model_handler=model_handler.with_postprocess_fn(format_output))
+      | "Output" >> WriteToBigQuery(
+        table=user_options.target_table,
+        schema=target_schema,
+        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED
+      )
     )
 
 if __name__ == "__main__":
@@ -42,9 +60,6 @@ if __name__ == "__main__":
   # required args
   parser.add_argument(
     "--endpoint_id", required=True
-  )
-  parser.add_argument(
-    "--location", required=True
   )
   parser.add_argument(
     "--project", required=True                  # example: engineering-training-413102

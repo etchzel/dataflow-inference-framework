@@ -14,25 +14,13 @@ class Input(DoFn):
 
     query_job = self.client.query(
       f"""
-      SELECT * FROM `{project_id}.{self.table_name.get()}`
+      SELECT * FROM `{project_id}.{self.table_name.get()}` LIMIT 5000;
       """
     )
 
     rows = query_job.result()
 
-    categorical_mapper = {
-      "married": 0,
-      "others": 1,
-      "single": 2,
-      "female": 0,
-      "male": 1,
-      "GradSch": 0,
-      "HighSch": 1,
-      "Other": 2,
-      "Univ": 3
-    }
-
     for row in rows:
-      yield (row, [categorical_mapper.get(row[k], row[k]) for k in row.keys() if k != 'ID'])
+      yield (row, [row[k] for k in row.keys() if k != 'fraud'])
 
     
