@@ -4,14 +4,21 @@ import sys
 import apache_beam as beam
 from modules.options import UserOptions
 from modules.input import Input
-from modules.output import Output
+from modules.output import format_output
+from modules.schema import target_schema
+from apache_beam.io.gcp.bigquery import WriteToBigQuery
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.ml.inference.base import RunInference, KeyedModelHandler
 from apache_beam.ml.inference.vertex_ai_inference import VertexAIModelHandlerJSON
-  
+
 def main(known_args, pipeline_args):
   runner = known_args.runner
-  pipeline_options = PipelineOptions(pipeline_args, streaming=False, runner=runner)
+  pipeline_options = PipelineOptions(
+    pipeline_args, 
+    streaming=False, 
+    runner=runner,
+    experiments=["use_runner_v2", "use_beam_bq_sink"]
+  )
 
   model_handler = KeyedModelHandler(VertexAIModelHandlerJSON(
     endpoint_id=known_args.endpoint_id,
@@ -24,8 +31,15 @@ def main(known_args, pipeline_args):
       pipeline
       | "Initialize" >> beam.Create(['init'])
       | "Input" >> beam.ParDo(Input(user_options.table_name))
-      | "Inference" >> RunInference(model_handler=model_handler)
-      | "Output" >> beam.ParDo(Output(user_options.target_table))
+      | "Inference" >> RunInference(
+        model_handler=model_handler.with_postprocess_fn(format_output)
+      )
+      | "Output" >> WriteToBigQuery(
+        table=user_options.target_table,
+        schema=target_schema,
+        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED
+      )
     )
 
 if __name__ == "__main__":
