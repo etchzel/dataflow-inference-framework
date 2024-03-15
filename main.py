@@ -4,18 +4,12 @@ import sys
 import apache_beam as beam
 from modules.options import UserOptions
 from modules.input import Input
+from modules.output import format_output
 from modules.schema import target_schema
 from apache_beam.io.gcp.bigquery import WriteToBigQuery
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.ml.inference.base import RunInference, KeyedModelHandler
 from apache_beam.ml.inference.vertex_ai_inference import VertexAIModelHandlerJSON
-
-def format_output(row):
-  output = {
-    **dict(row[0]),
-    "fraud_inference": row[1].inference
-  }
-  return output
   
 def main(known_args, pipeline_args):
   runner = known_args.runner
